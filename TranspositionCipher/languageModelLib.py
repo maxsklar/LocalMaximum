@@ -80,40 +80,6 @@ def readInModel(filename):
 
 potential_word_pattern = re.compile('[ABCDEFGHIJKLMNOPQRSTUVWXYZ]+')
 
-def entropyOfText(text, model, smoothingConstant = 50, grams = 5):
-  ngram_model, hist_known_words, total_words = model
-  total_known_words = sum(hist_known_words.values())
-  prob_known_words = float(total_known_words) / total_words
-  
-  entropy = 0.0
-  
-  text_plus = '<' + text + '>'
-  
-  # Look for known words
-  known_words = {}
-  unknown_words = set()
-  for m in potential_word_pattern.finditer(text_plus):
-    potential_word = m.group()
-    if (potential_word in hist_known_words):
-      known_words[m.start()] = potential_word
-    else:
-      unknown_words.add(m.start())
-  
-  char_ix = 0
-  while (char_ix < len(text_plus)):
-    probability = 1.0 / 28
-    for nth_gram in range(1, grams + 1):
-      if (char_ix + 1 - nth_gram < 0): break
-      ngram_text = text_plus[(char_ix + 1 - nth_gram):(char_ix + 1)]
-      conditional_ngram_text = text_plus[(char_ix + 2 - nth_gram):(char_ix + 1)]
-      #smooth from previous
-      probability = (smoothingConstant * probability + ngram_model.get(ngram_text, 0)) / (smoothingConstant + ngram_model.get(conditional_ngram_text, 0))
-    
-    entropy +=  -1 * math.log(probability)
-    
-    char_ix += 1
-  return entropy
-
 # use a unigram (bag of characters) model to assign probabilities to the space placement 
 def entropyOfSpacePlacement(text, model, smoothingConstant = 50.0):
   ngram_model, hist_known_words, total_words = model
@@ -169,11 +135,7 @@ def entropyOfTextWithWordsGivenSpacePlacement(text, model, smoothingConstant = 5
   
   return entropy
 
-def entropyOfTextWordStrategy(text, model, smoothingConstant = 50, grams = 5):
+def entropyOfText(text, model, smoothingConstant = 50, grams = 5):
   entropy = entropyOfSpacePlacement(text, model, smoothingConstant)
   entropy += entropyOfTextWithWordsGivenSpacePlacement(text, model, smoothingConstant, grams)
   return entropy
-
-def entropyOfTextGivenStrategy(text, model, useWordStrategy, smoothingConstant = 50, grams = 5):
-  if (useWordStrategy): return entropyOfTextWordStrategy(text, model, smoothingConstant, grams)
-  return entropyOfText(text, model, smoothingConstant, grams)
