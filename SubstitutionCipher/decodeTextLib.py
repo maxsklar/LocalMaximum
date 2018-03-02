@@ -201,7 +201,7 @@ def decodeMessageTrialMarkov(message, model, steps):
         transposeStrategy = "Double"
         remainingTransposes = generateAll2CharTransposes(old_transpose)
 
-  return old_transpose, old_transformed, old_entropy, i
+  return old_transpose, old_transformed, old_entropy
 
 def decodeMessage(message, model, trials):
   best_encoding_entropy = float("inf")
@@ -211,7 +211,7 @@ def decodeMessage(message, model, trials):
   for trial in range(0, trials):
     result = decodeMessageTrialMarkov(message, model, 1000)
     
-    old_transpose, old_transformed, old_entropy, num_steps = result
+    old_transpose, old_transformed, old_entropy = result
     
     if (old_entropy < best_encoding_entropy):
       # Trial is accepted
@@ -219,6 +219,6 @@ def decodeMessage(message, model, trials):
       best_transpose = old_transpose
       best_transformed = old_transformed
     
-    print "TRIAL " + str(trial), "STEPS: " + str(num_steps), old_transformed, " -- ", ''.join(old_transpose), old_entropy, best_encoding_entropy, best_transformed
+    print "TRIAL " + str(trial), old_transformed, " -- ", ''.join(old_transpose), old_entropy, best_encoding_entropy, best_transformed
 
   return best_transformed
