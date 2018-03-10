@@ -5,7 +5,7 @@ import math
 import re
 import languageModelLib
 
-Characters = list(' ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+Characters = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 NumCharacters = len(Characters)
 EndSentencePunct = list('.?!')
 
@@ -15,51 +15,53 @@ def randomTranspose(numberToSelect):
   return copy[:numberToSelect]
 
 # In this case, we already know which character is the space
-def randomTransposeGivenSpace(numberToSelect, space):
+def randomTransposeGivenSpace(charsInMessage, space):
   copy = list(Characters)
   random.shuffle(copy)
-  copy = transposeIndecies(copy, 0, copy.index(space))
-  return copy[:numberToSelect]
+  
+  if (space in charsInMessage):
+    space_ix = charsInMessage.find(space)
+    space_ix_in_copy = copy.index(" ")
+    copy = transposeIndecies(copy, space_ix_in_copy, space_ix)
+  
+  numberToSelect = len(charsInMessage)
+  return ''.join(copy[:numberToSelect])
 
-
-def randomSingleCharTranspose(transpose):
-  L = len(transpose)
-  first_ix = random.randint(0, L - 1)
-  
-  second_ix = random.randint(0, NumCharacters - 1)
-  second_char = Characters[second_ix]
-  
-  if (second_char in transpose):
-    index_to_swap = transpose.index(second_char)
-    return transposeIndecies(transpose, first_ix, index_to_swap)
-  
-  copy = list(transpose)
-  copy[first_ix] = second_char
-  
-  return copy
+# Choose a random integer from 0 to maxInt-1, not allowing the set of forbidden ints
+def chooseInt(maxInt, forbiddenSet):
+  remainingSet = set(range(0, maxInt)) - forbiddenSet
+  if (len(remainingSet) == 0): return -1
+  ix = random.randint(0, len(remainingSet) - 1)
+  return list(remainingSet)[ix]
 
 def randomSingleCharTransposeNotSpace(transpose):
+  space_ix = transpose.find(" ")
+  
   L = len(transpose)
-  first_ix = random.randint(1, L - 1)
-
-  second_ix = random.randint(0, NumCharacters - 2)
+  first_ix = chooseInt(L, set([space_ix]))
+  first_char = transpose[first_ix]
+  
+  second_ix = chooseInt(NumCharacters, set([Characters.find(" "), Characters.find(first_char)]))
   second_char = Characters[second_ix]
-
+  
   if (second_char in transpose):
     index_to_swap = transpose.index(second_char)
     return transposeIndecies(transpose, first_ix, index_to_swap)
-
+  
   copy = list(transpose)
   copy[first_ix] = second_char
-
-  return copy
+  
+  return ''.join(copy)
     
 def generateAllSingleCharTransposes(transpose):
   allTransposes = []
   L = len(transpose)
+  space_ix = transpose.find(" ")
   for first_ix in range(0, L):
+    if (first_ix == space_ix): continue
     for second_ix in range(0, NumCharacters):
       second_char = Characters[second_ix]
+      if (second_char == " "): continue
       
       if (second_char in transpose):
         index_to_swap = transpose.index(second_char)
@@ -71,36 +73,16 @@ def generateAllSingleCharTransposes(transpose):
         allTransposes.append(''.join(copy))
   return allTransposes
 
-def generateAll2CharTransposes(transpose):
+def generateAllDoubleTransposes(transpose):
+  singleTransposes = generateAllSingleCharTransposes(transpose)
+  
   allTransposes = []
-  L = len(transpose)
-  for first_ix in range(0, L):
-    for second_ix in range(first_ix + 1, L):
-      for third_ix in range(0, NumCharacters):
-        third_char = Characters[second_ix]
-
-        if (third_char in transpose):
-          third_char_index_to_swap = transpose.index(third_char)
-          if (third_char_index_to_swap <= second_ix): continue
-          
-          transpose2 = transposeIndecies(transpose, first_ix, second_ix)
-          transpose3 = transposeIndecies(transpose, first_ix, third_char_index_to_swap)
-          allTransposes.append(transpose3)
-          
-          transpose2 = transposeIndecies(transpose, first_ix, third_char_index_to_swap)
-          transpose3 = transposeIndecies(transpose, first_ix, second_ix)
-          allTransposes.append(transpose3)
-        else:
-          copy = list(transpose)
-          copy[first_ix] = transpose[second_ix]
-          copy[second_ix] = third_char
-          allTransposes.append(''.join(copy))
-          
-          copy = list(transpose)
-          copy[first_ix] = third_char
-          copy[second_ix] = transpose[first_ix]
-          allTransposes.append(''.join(copy))
-          
+  
+  for singleTranspose in singleTransposes:
+    doubleTranspose = generateAllSingleCharTransposes(singleTranspose)
+    if (doubleTranspose == transpose): continue
+    allTransposes.append(doubleTranspose)
+  
   return allTransposes
     
 def transposeIndecies(chars, first_ix, second_ix):
@@ -145,14 +127,14 @@ def weighted_random_by_dct(dct):
     if rand_val <= total: return k
   assert False, 'unreachable'
 
-def decodeMessageTrialMarkov(message, model, steps):
+def decodeMessageTrialMarkov(message, model, steps, knownSpace = None):
   charsInMessageList = list(set(message))
   charsInMessageList.sort()
   charsInMessage = ''.join(charsInMessageList)
 
-  space = chooseSpacePlacement(message, model)
+  space = knownSpace if (knownSpace) else chooseSpacePlacement(message, model)
 
-  old_transpose = randomTransposeGivenSpace(len(charsInMessage), space)
+  old_transpose = randomTransposeGivenSpace(charsInMessage, space)
   old_transformed = transformText(message, charsInMessage, old_transpose)
   old_entropy = languageModelLib.entropyOfText(old_transformed, model)
 
@@ -199,17 +181,17 @@ def decodeMessageTrialMarkov(message, model, steps):
       
       if (len(remainingTransposes) == 0) and (transposeStrategy == "Single"):
         transposeStrategy = "Double"
-        remainingTransposes = generateAll2CharTransposes(old_transpose)
+        remainingTransposes = generateAllDoubleTransposes(old_transpose)
 
   return old_transpose, old_transformed, old_entropy
 
-def decodeMessage(message, model, trials):
+def decodeMessage(message, model, trials, knownSpace = None):
   best_encoding_entropy = float("inf")
   best_transpose = None
   best_transformed = None
   
   for trial in range(0, trials):
-    result = decodeMessageTrialMarkov(message, model, 1000)
+    result = decodeMessageTrialMarkov(message, model, 1000, knownSpace)
     
     old_transpose, old_transformed, old_entropy = result
     
@@ -222,3 +204,81 @@ def decodeMessage(message, model, trials):
     print "TRIAL " + str(trial), old_transformed, " -- ", ''.join(old_transpose), old_entropy, best_encoding_entropy, best_transformed
 
   return best_transformed
+
+######################
+### Brute Force Search
+
+def advanceTransposeList(currentTransposeList, space_ix):
+  advancing_ix = len(currentTransposeList) - 1
+  
+  while advancing_ix >= 0:
+    if (advancing_ix == space_ix):
+      advancing_ix -= 1
+      continue
+    
+    currentTransposeList[advancing_ix] += 1
+    
+    if (currentTransposeList[advancing_ix] == len(Characters)):
+      currentTransposeList[advancing_ix] = 0
+      advancing_ix -= 1
+    else: return True
+  return False
+  
+def transposeListToTranspose(tlist):
+  return ''.join(map(lambda x: Characters[x], tlist))
+
+def isValidTranspose(tlist, space_ix):
+  # Check for duplicates
+  if (len(tlist) != len(set(tlist))): return False
+  
+  # Check on known space
+  if (space_ix != -1):
+    if (tlist[space_ix] != 0): return False
+  elif (0 in tlist):
+    return False
+    
+  return True
+  
+def decodeMessageBruteForce(message, model, knownSpace = None):
+  charsInMessageList = list(set(message))
+  charsInMessageList.sort()
+  charsInMessage = ''.join(charsInMessageList)
+  
+  print "CHARS TO DESCRAMBLE: " + charsInMessage
+  
+  space_ix = charsInMessage.find(knownSpace)
+  
+  best_encoding_entropy = float("inf")
+  best_transpose = None
+  best_transformed = None
+  
+  tlist = [0] * len(charsInMessage)
+  
+  for i in range(0, len(charsInMessage)):
+    if (space_ix == -1): tlist[i] = i + 1
+    elif (i < space_ix): tlist[i] = i + 1
+    elif (i == space_ix): tlist[i] = 0
+    elif (i > space_ix): tlist[i] = i
+  
+  trial = 0
+  while True:
+    if (isValidTranspose(tlist, space_ix)):
+      new_transpose = transposeListToTranspose(tlist)
+      new_transformed = transformText(message, charsInMessage, new_transpose)
+      new_entropy = languageModelLib.entropyOfText(new_transformed, model)
+      
+      if (trial % 10000 == 0): print "TRIAL: " + str(trial) + " --- " + new_transpose
+      
+      trial += 1
+
+      if (new_entropy < best_encoding_entropy):
+        best_transformed = new_transformed
+        best_transpose = new_transpose
+        best_encoding_entropy = new_entropy
+        
+        print "NEW BEST ON TRIAL " + str(trial), best_transpose, "---", best_encoding_entropy, "---", best_transformed 
+      
+    shouldContinue = advanceTransposeList(tlist, space_ix)
+    if (not shouldContinue): break
+  return best_transformed
+    
